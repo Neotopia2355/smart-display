@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ディスプレイ"><meta name="theme-color" content="#0d1114"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>横長スマートディスプレイ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@300;500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 32:9 の帯に、時計 → 今の天気 → 時間予報 → 3日予報 → カレンダー → メモ を横一列で並べる。狭い画面では折り返す */
+:root {
+  --bg: #0d1114;
+  --panel: #151b20;
+  --line: #24303a;
+  --fg: #e8eef2;
+  --muted: #8797a3;
+  --accent: #f2b544;   /* 計器ランプの琥珀色 */
+  --rain: #5fb3e6;
+  --sun: #f2b544;
+  --hol: #ef7a6b;
+  --sat: #6fa8dc;
+  --digits: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef1f3; --panel: #ffffff; --line: #d6dde2; --fg: #14202a; --muted: #5b6b77;
+    --accent: #b9770b; --rain: #1f7fbf; --sun: #c98a0e; --hol: #c8473a; --sat: #2f6fb0;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eef1f3; --panel: #ffffff; --line: #d6dde2; --fg: #14202a; --muted: #5b6b77;
+  --accent: #b9770b; --rain: #1f7fbf; --sun: #c98a0e; --hol: #c8473a; --sat: #2f6fb0;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 10px;
+}
+* { box-sizing: border-box; }
+.board {
+  flex: 1; min-height: 0;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch;
+}
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 14px 16px; min-width: 0; display: flex; flex-direction: column; gap: 8px;
+}
+.label {
+  font-size: 11px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; font-weight: 500;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.num { font-family: var(--digits); font-variant-numeric: tabular-nums; }
+
+/* 時計 */
+.clock { flex: 2.2 1 380px; background: transparent; border: none; padding: 4px 8px; justify-content: center; }
+.time { font-family: var(--digits); font-weight: 500; line-height: .9; font-size: clamp(72px, min(30vh, 11vw), 260px); letter-spacing: .01em; font-variant-numeric: tabular-nums; white-space: nowrap; align-self: flex-start; }
+.time .sec { font-size: .32em; color: var(--accent); font-weight: 300; margin-left: .12em; }
+.time .colon { color: var(--accent); }
+.date { font-size: clamp(15px, 2.4vh, 22px); color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+.date b { color: var(--fg); font-weight: 500; }
+
+/* 今の天気 */
+.now { flex: 1.1 1 220px; }
+.now-main { display: flex; align-items: center; gap: 12px; }
+.now-temp { font-size: clamp(48px, 13vh, 96px); font-weight: 500; line-height: 1; }
+.now-temp small { font-size: .4em; color: var(--muted); }
+.now-desc { font-size: 15px; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; color: var(--muted); }
+.facts span:nth-child(even) { color: var(--fg); }
+
+/* 時間予報 */
+.hourly { flex: 2 1 340px; }
+.hours { flex: 1; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; align-items: end; min-height: 120px; }
+.hour { display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; justify-content: flex-end; font-size: 12px; }
+.hour .t { font-family: var(--digits); font-size: 18px; }
+.hour .bar { width: 60%; max-width: 22px; background: var(--rain); border-radius: 2px 2px 0 0; opacity: .85; min-height: 2px; }
+.hour .p { color: var(--rain); font-family: var(--digits); font-size: 13px; }
+.hour .h { color: var(--muted); font-family: var(--digits); font-size: 13px; }
+
+/* 3日予報 */
+.daily { flex: 1.3 1 260px; }
+.days { display: flex; flex-direction: column; gap: 6px; flex: 1; justify-content: space-around; }
+.day { display: grid; grid-template-columns: 3.2em 30px 1fr auto; align-items: center; gap: 8px; font-size: 14px; }
+.day .hi { color: var(--hol); } .day .lo { color: var(--sat); }
+.day .tt { font-family: var(--digits); font-size: 18px; white-space: nowrap; }
+.day .pp { font-family: var(--digits); color: var(--rain); font-size: 14px; text-align: right; min-width: 3em; }
+
+/* カレンダー */
+.cal { flex: 1.2 1 250px; }
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; text-align: center; font-family: var(--digits); font-size: 15px; flex: 1; align-content: space-around; }
+.grid .w { font-family: var(--body); font-size: 11px; color: var(--muted); }
+.grid .d { padding: 2px 0; border-radius: 4px; }
+.grid .sun, .grid .hol { color: var(--hol); }
+.grid .sat { color: var(--sat); }
+.grid .out { opacity: .25; }
+.grid .today { background: var(--accent); color: var(--bg); font-weight: 700; }
+.holname { font-size: 12px; color: var(--hol); min-height: 1.2em; }
+
+/* メモ */
+.memo { flex: 1.3 1 240px; }
+.memo textarea {
+  flex: 1; min-height: 90px; width: 100%; resize: none; background: transparent; color: var(--fg);
+  border: 1px dashed var(--line); border-radius: 4px; padding: 8px; font: 15px/1.6 var(--body);
+}
+.memo textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* 操作バー */
+.bar-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.tools { display: flex; gap: 8px; }
+button {
+  font: inherit; font-size: 12px; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status { font-size: 12px; color: var(--muted); }
+.err { color: var(--hol); font-size: 13px; }
+
+/* 設定 */
+.settings { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 5; }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; width: min(460px, 100%); display: flex; flex-direction: column; gap: 14px; }
+.sheet h2 { margin: 0; font-size: 17px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sheet input[type=text], .sheet select { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; }
+.results { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
+.results button { text-align: left; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+
+body.dim { filter: brightness(.55); }
+@media (max-width: 640px) {
+  .hours { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .hours .hour:nth-child(n+7) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="bar-top">
+  <span class="status" id="status">天気を読み込み中…</span>
+  <div class="tools">
+    <button id="btnDim" type="button">減光</button>
+    <button id="btnSettings" type="button">設定</button>
+    <button id="btnFull" type="button">全画面</button>
+  </div>
+</div>
+
+<main class="board">
+  <section class="panel clock" aria-label="時計">
+    <div class="time" id="time">--<span class="colon">:</span>--<span class="sec">--</span></div>
+    <div class="date"><b id="date">----年--月--日</b><span id="wareki"></span><span id="holToday" style="color:var(--hol)"></span></div>
+  </section>
+
+  <section class="panel now" aria-label="現在の天気">
+    <div class="label"><span>現在</span><span id="place">東京</span></div>
+    <div class="now-main">
+      <div id="nowIcon"></div>
+      <div class="now-temp num" id="nowTemp">--<small>℃</small></div>
+    </div>
+    <div class="now-desc" id="nowDesc">—</div>
+    <div class="facts">
+      <span>体感</span><span class="num" id="feels">--</span>
+      <span>湿度</span><span class="num" id="hum">--</span>
+      <span>風</span><span class="num" id="wind">--</span>
+    </div>
+  </section>
+
+  <section class="panel hourly" aria-label="時間ごとの予報">
+    <div class="label"><span>これからの8時間</span><span>気温 / 降水確率</span></div>
+    <div class="hours" id="hours"></div>
+  </section>
+
+  <section class="panel daily" aria-label="3日間の予報">
+    <div class="label"><span>3日間</span><span>最高 / 最低 · 降水</span></div>
+    <div class="days" id="days"></div>
+  </section>
+
+  <section class="panel cal" aria-label="カレンダー">
+    <div class="label"><span id="calTitle">----年--月</span><span>祝日つき</span></div>
+    <div class="grid" id="grid"></div>
+    <div class="holname" id="holNext"></div>
+  </section>
+
+  <section class="panel memo" aria-label="メモ">
+    <div class="label"><span>メモ</span><span id="memoSaved"></span></div>
+    <textarea id="memo" placeholder="例: 牛乳を買う / 金曜は燃えるゴミ"></textarea>
+  </section>
+</main>
+
+<div class="settings" id="settings" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <h2 id="setTitle">設定</h2>
+    <div>
+      <div class="label" style="margin-bottom:6px"><span>天気の地点</span></div>
+      <form class="row" id="cityForm">
+        <input type="text" id="cityInput" placeholder="市区町村名（例: 札幌、横浜市）">
+        <button type="submit">検索</button>
+      </form>
+      <div class="results" id="cityResults"></div>
+    </div>
+    <div class="row">
+      <label for="fmt">時刻の表示</label>
+      <select id="fmt"><option value="24">24時間</option><option value="12">12時間（午前/午後）</option></select>
+    </div>
+    <div class="row">
+      <label for="secs">秒の表示</label>
+      <select id="secs"><option value="1">表示する</option><option value="0">表示しない</option></select>
+    </div>
+    <p class="hint">天気は Open-Meteo（無料・登録不要）から15分ごとに取得します。設定とメモはこのブラウザに保存されます。</p>
+    <div class="row" style="justify-content:flex-end"><button type="button" id="btnClose">閉じる</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- 保存（使えない環境でも動くように） ----
+  function load(key, def) { try { var v = localStorage.getItem(key); return v === null ? def : JSON.parse(v); } catch (e) { return def; } }
+  function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+
+  var cfg = load('sd.cfg', { name: '東京', lat: 35.6895, lon: 139.6917, fmt: '24', secs: '1' });
+  var $ = function (id) { return document.getElementById(id); };
+  var WD = ['日', '月', '火', '水', '木', '金', '土'];
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+
+  // ---- 日本の祝日（2026〜2027年、振替休日・国民の休日を含む） ----
+  var HOL = {
+    '2026-01-01': '元日', '2026-01-12': '成人の日', '2026-02-11': '建国記念の日', '2026-02-23': '天皇誕生日',
+    '2026-03-20': '春分の日', '2026-04-29': '昭和の日', '2026-05-03': '憲法記念日', '2026-05-04': 'みどりの日',
+    '2026-05-05': 'こどもの日', '2026-05-06': '振替休日', '2026-07-20': '海の日', '2026-08-11': '山の日',
+    '2026-09-21': '敬老の日', '2026-09-22': '国民の休日', '2026-09-23': '秋分の日', '2026-10-12': 'スポーツの日',
+    '2026-11-03': '文化の日', '2026-11-23': '勤労感謝の日',
+    '2027-01-01': '元日', '2027-01-11': '成人の日', '2027-02-11': '建国記念の日', '2027-02-23': '天皇誕生日',
+    '2027-03-21': '春分の日', '2027-03-22': '振替休日', '2027-04-29': '昭和の日', '2027-05-03': '憲法記念日',
+    '2027-05-04': 'みどりの日', '2027-05-05': 'こどもの日', '2027-07-19': '海の日', '2027-08-11': '山の日',
+    '2027-09-20': '敬老の日', '2027-09-23': '秋分の日', '2027-10-11': 'スポーツの日', '2027-11-03': '文化の日',
+    '2027-11-23': '勤労感謝の日'
+  };
+
+  // ---- 時計 ----
+  var lastDay = '';
+  var timeLen = -1;
+  // 時計の文字が枠からはみ出すときは、枠に収まる大きさまで縮める
+  function fitClock() {
+    var el = $('time'), box = el.parentNode;
+    el.style.fontSize = '';
+    var cs = getComputedStyle(box);
+    var avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    var w = el.scrollWidth;
+    if (w > avail) el.style.fontSize = (parseFloat(getComputedStyle(el).fontSize) * avail / w * 0.97) + 'px';
+  }
+  function tick() {
+    var d = new Date();
+    var h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+    var prefix = '';
+    if (cfg.fmt === '12') { prefix = '<span class="sec" style="margin:0 .15em 0 0">' + (h < 12 ? '午前' : '午後') + '</span>'; h = h % 12 || 12; }
+    $('time').innerHTML = prefix + (cfg.fmt === '12' ? h : pad(h)) + '<span class="colon">:</span>' + pad(m) +
+      (cfg.secs === '1' ? '<span class="sec">' + pad(s) + '</span>' : '');
+    var len = $('time').textContent.length;
+    if (len !== timeLen) { timeLen = len; fitClock(); }
+    var key = ymd(d);
+    if (key !== lastDay) { lastDay = key; renderDate(d); renderCal(d); }
+  }
+  function renderDate(d) {
+    $('date').textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日（' + WD[d.getDay()] + '）';
+    $('wareki').textContent = '令和' + (d.getFullYear() - 2018) + '年';
+    $('holToday').textContent = HOL[ymd(d)] || '';
+  }
+
+  // ---- カレンダー ----
+  function renderCal(today) {
+    var y = today.getFullYear(), mo = today.getMonth();
+    $('calTitle').textContent = y + '年' + (mo + 1) + '月';
+    var html = WD.map(function (w, i) { return '<div class="w' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') + '">' + w + '</div>'; }).join('');
+    var first = new Date(y, mo, 1);
+    var start = new Date(y, mo, 1 - first.getDay());
+    var weeks = Math.ceil((first.getDay() + new Date(y, mo + 1, 0).getDate()) / 7);
+    for (var i = 0; i < weeks * 7; i++) {
+      var d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      var c = ['d'];
+      if (d.getMonth() !== mo) c.push('out');
+      if (HOL[ymd(d)]) c.push('hol'); else if (d.getDay() === 0) c.push('sun'); else if (d.getDay() === 6) c.push('sat');
+      if (ymd(d) === ymd(today)) c.push('today');
+      html += '<div class="' + c.join(' ') + '"' + (HOL[ymd(d)] ? ' title="' + HOL[ymd(d)] + '"' : '') + '>' + d.getDate() + '</div>';
+    }
+    $('grid').innerHTML = html;
+    // 次の祝日
+    var next = Object.keys(HOL).sort().filter(function (k) { return k > ymd(today); })[0];
+    if (next) {
+      var p = next.split('-');
+      var days = Math.round((new Date(+p[0], p[1] - 1, +p[2]) - new Date(y, mo, today.getDate())) / 86400000);
+      $('holNext').textContent = '次の祝日: ' + (+p[1]) + '/' + (+p[2]) + ' ' + HOL[next] + '（あと' + days + '日）';
+    } else { $('holNext').textContent = ''; }
+  }
+
+  // ---- 天気 ----
+  function wmo(code) {
+    if (code === 0) return ['快晴', 'sun'];
+    if (code === 1) return ['晴れ', 'sun'];
+    if (code === 2) return ['晴れ時々くもり', 'part'];
+    if (code === 3) return ['くもり', 'cloud'];
+    if (code === 45 || code === 48) return ['霧', 'fog'];
+    if (code >= 51 && code <= 57) return ['霧雨', 'rain'];
+    if (code >= 61 && code <= 67) return [code >= 65 ? '強い雨' : '雨', 'rain'];
+    if (code >= 71 && code <= 77) return ['雪', 'snow'];
+    if (code >= 80 && code <= 82) return ['にわか雨', 'rain'];
+    if (code === 85 || code === 86) return ['にわか雪', 'snow'];
+    if (code >= 95) return ['雷雨', 'thunder'];
+    return ['—', 'cloud'];
+  }
+  function icon(kind, size) {
+    var s = size || 28;
+    var sun = '<circle cx="16" cy="16" r="6" fill="var(--sun)"/><g stroke="var(--sun)" stroke-width="2" stroke-linecap="round">' +
+      [0, 45, 90, 135, 180, 225, 270, 315].map(function (a) { var r = a * Math.PI / 180; return '<line x1="' + (16 + Math.cos(r) * 9.5) + '" y1="' + (16 + Math.sin(r) * 9.5) + '" x2="' + (16 + Math.cos(r) * 13) + '" y2="' + (16 + Math.sin(r) * 13) + '"/>'; }).join('') + '</g>';
+    var cloud = function (dx, dy) { return '<path transform="translate(' + (dx || 0) + ' ' + (dy || 0) + ')" d="M9 24h14a5 5 0 0 0 0-10 7 7 0 0 0-13.4 1.8A4.2 4.2 0 0 0 9 24z" fill="var(--muted)"/>'; };
+    var body = {
+      sun: sun,
+      part: '<g transform="translate(-4 -4) scale(.8)">' + sun + '</g>' + cloud(2, 3),
+      cloud: cloud(0, 0),
+      fog: cloud(0, -4) + '<g stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><line x1="7" y1="25" x2="25" y2="25"/><line x1="10" y1="29" x2="22" y2="29"/></g>',
+      rain: cloud(0, -4) + '<g stroke="var(--rain)" stroke-width="2" stroke-linecap="round"><line x1="11" y1="24" x2="9" y2="29"/><line x1="17" y1="24" x2="15" y2="29"/><line x1="23" y1="24" x2="21" y2="29"/></g>',
+      snow: cloud(0, -4) + '<g fill="var(--fg)"><circle cx="10" cy="26" r="1.6"/><circle cx="16" cy="28" r="1.6"/><circle cx="22" cy="26" r="1.6"/></g>',
+      thunder: cloud(0, -4) + '<path d="M17 21l-4 6h3l-2 5 5-7h-3l2-4z" fill="var(--accent)"/>'
+    }[kind];
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 32 32" aria-hidden="true">' + body + '</svg>';
+  }
+  function dirName(deg) { return ['北', '北東', '東', '南東', '南', '南西', '西', '北西'][Math.round(deg / 45) % 8]; }
+
+  function renderWeather(w) {
+    var c = w.current, k = wmo(c.weather_code);
+    $('place').textContent = cfg.name;
+    $('nowIcon').innerHTML = icon(k[1], 64);
+    $('nowTemp').innerHTML = Math.round(c.temperature_2m) + '<small>℃</small>';
+    $('nowDesc').textContent = k[0];
+    $('feels').textContent = Math.round(c.apparent_temperature) + '℃';
+    $('hum').textContent = c.relative_humidity_2m + '%';
+    $('wind').textContent = dirName(c.wind_direction_10m) + ' ' + Math.round(c.wind_speed_10m / 3.6) + 'm/s';
+
+    // 現在時刻以降の8時間
+    var nowKey = c.time.slice(0, 13);
+    var idx = 0;
+    for (var i = 0; i < w.hourly.time.length; i++) { if (w.hourly.time[i].slice(0, 13) >= nowKey) { idx = i; break; } }
+    var html = '';
+    for (var j = idx; j < idx + 8 && j < w.hourly.time.length; j++) {
+      var p = w.hourly.precipitation_probability[j] || 0;
+      html += '<div class="hour"><span class="t">' + Math.round(w.hourly.temperature_2m[j]) + '°</span>' +
+        icon(wmo(w.hourly.weather_code[j])[1], 22) +
+        '<div class="bar" style="height:' + Math.max(2, p * 0.5) + 'px"></div>' +
+        '<span class="p">' + p + '%</span><span class="h">' + (+w.hourly.time[j].slice(11, 13)) + '時</span></div>';
+    }
+    $('hours').innerHTML = html;
+
+    var names = ['今日', '明日', '明後日'];
+    $('days').innerHTML = [0, 1, 2].map(function (n) {
+      var d = w.daily;
+      return '<div class="day"><span>' + names[n] + '</span>' + icon(wmo(d.weather_code[n])[1], 28) +
+        '<span class="tt"><span class="hi">' + Math.round(d.temperature_2m_max[n]) + '°</span> / <span class="lo">' + Math.round(d.temperature_2m_min[n]) + '°</span></span>' +
+        '<span class="pp">☂ ' + (d.precipitation_probability_max[n] || 0) + '%</span></div>';
+    }).join('');
+  }
+
+  function fetchWeather() {
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + cfg.lat + '&longitude=' + cfg.lon +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m' +
+      '&hourly=temperature_2m,precipitation_probability,weather_code' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+      '&timezone=auto&forecast_days=3';
+    fetch(url).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (w) {
+      renderWeather(w);
+      save('sd.weather', { at: Date.now(), key: cfg.lat + ',' + cfg.lon, data: w });
+      var t = new Date();
+      $('status').textContent = cfg.name + 'の天気 · ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ' 更新';
+    }).catch(function () {
+      $('status').innerHTML = '<span class="err">天気を取得できません。ネット接続を確認してください（Claudeのプレビュー画面では天気は表示されません。ファイルをブラウザで直接開くと表示されます）</span>';
+    });
+  }
+
+  // ---- 設定 ----
+  function openSettings() { $('fmt').value = cfg.fmt; $('secs').value = cfg.secs; $('settings').hidden = false; $('cityInput').focus(); }
+  function closeSettings() { $('settings').hidden = true; }
+  $('btnSettings').addEventListener('click', openSettings);
+  $('btnClose').addEventListener('click', closeSettings);
+  $('settings').addEventListener('click', function (e) { if (e.target === this) closeSettings(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSettings(); });
+  $('fmt').addEventListener('change', function () { cfg.fmt = this.value; save('sd.cfg', cfg); tick(); });
+  $('secs').addEventListener('change', function () { cfg.secs = this.value; save('sd.cfg', cfg); tick(); });
+  $('cityForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var q = $('cityInput').value.trim(); if (!q) return;
+    $('cityResults').textContent = '検索中…';
+    function geo(name) {
+      return fetch('https://geocoding-api.open-meteo.com/v1/search?count=6&language=ja&name=' + encodeURIComponent(name))
+        .then(function (r) { return r.json(); });
+    }
+    // 「札幌」では見つからず「札幌市」なら見つかることがあるので、0件なら「市」を付けて再検索する
+    geo(q)
+      .then(function (j) { return (j.results && j.results.length) || /[市町村区]$/.test(q) ? j : geo(q + '市'); })
+      .then(function (j) {
+        var res = j.results || [];
+        if (!res.length) { $('cityResults').textContent = '見つかりませんでした。「市」「町」を外すか、別の書き方で試してください。'; return; }
+        $('cityResults').innerHTML = '';
+        res.forEach(function (r) {
+          var b = document.createElement('button'); b.type = 'button';
+          b.textContent = r.name + '（' + [r.admin1, r.country].filter(Boolean).join('・') + '）';
+          b.addEventListener('click', function () {
+            cfg.name = r.name; cfg.lat = r.latitude; cfg.lon = r.longitude; save('sd.cfg', cfg);
+            $('place').textContent = cfg.name; closeSettings(); fetchWeather();
+          });
+          $('cityResults').appendChild(b);
+        });
+      })
+      .catch(function () { $('cityResults').textContent = '検索できませんでした。ネット接続を確認してください。'; });
+  });
+
+  // ---- 全画面・減光・画面スリープ防止 ----
+  var wake = null;
+  function keepAwake() {
+    if (navigator.wakeLock && document.visibilityState === 'visible') {
+      navigator.wakeLock.request('screen').then(function (l) { wake = l; }).catch(function () {});
+    }
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+  $('btnFull').addEventListener('click', function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement) { document.exitFullscreen().catch(function () {}); }
+    else if (el.requestFullscreen) { el.requestFullscreen().catch(function () {}); }
+    keepAwake();
+  });
+  var dim = load('sd.dim', false);
+  function applyDim() { document.body.classList.toggle('dim', dim); $('btnDim').textContent = dim ? '明るく' : '減光'; }
+  $('btnDim').addEventListener('click', function () { dim = !dim; save('sd.dim', dim); applyDim(); });
+  applyDim();
+
+  // ---- メモ ----
+  var memo = $('memo');
+  memo.value = load('sd.memo', '');
+  var memoTimer;
+  memo.addEventListener('input', function () {
+    clearTimeout(memoTimer);
+    memoTimer = setTimeout(function () { save('sd.memo', memo.value); $('memoSaved').textContent = '保存しました'; setTimeout(function () { $('memoSaved').textContent = ''; }, 1500); }, 400);
+  });
+
+  // ---- 起動 ----
+  tick();
+  setInterval(tick, 1000);
+  window.addEventListener('resize', fitClock);
+  document.addEventListener('fullscreenchange', fitClock);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitClock);
+  var cached = load('sd.weather', null);
+  if (cached && cached.key === cfg.lat + ',' + cfg.lon && Date.now() - cached.at < 3 * 3600 * 1000) {
+    try { renderWeather(cached.data); } catch (e) {}
+  }
+  fetchWeather();
+  setInterval(fetchWeather, 15 * 60 * 1000);
+  keepAwake();
+})();
+</script>
+
+</body></html>
